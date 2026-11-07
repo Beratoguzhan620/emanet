@@ -4,7 +4,7 @@ public sealed record UserDto(Guid Id, string Email, string DisplayName);
 
 public sealed record SessionDto(string AccessToken, DateTimeOffset ExpiresAt, UserDto User);
 
-public sealed record MeDto(UserDto User, DateTimeOffset MemberSince, int ActiveListings);
+public sealed record MeDto(UserDto User, DateTimeOffset MemberSince, int ActiveListings, bool IsAdmin);
 
 public sealed record PageDto<T>(List<T> Items, int Total, int PageNumber, int PageSize);
 
