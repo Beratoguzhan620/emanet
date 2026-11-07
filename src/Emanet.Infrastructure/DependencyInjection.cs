@@ -1,3 +1,5 @@
+using Emanet.Core.Payments;
+using Emanet.Infrastructure.Payments;
 using Emanet.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,6 +14,8 @@ public static class DependencyInjection
         var dataSource = BuildDataSource(connectionString);
         services.AddSingleton(dataSource);
         services.AddDbContext<EmanetDbContext>(options => ConfigureDbContext(options, dataSource));
+        services.AddSingleton<FakePaymentProvider>();
+        services.AddSingleton<IPaymentProvider>(provider => provider.GetRequiredService<FakePaymentProvider>());
         return services;
     }
 
@@ -40,6 +44,8 @@ public static class DependencyInjection
         {
             await using var scope = services.CreateAsyncScope();
             await scope.ServiceProvider.GetRequiredService<EmanetDbContext>().Database.MigrateAsync(ct);
+            // The stand-in payment provider keeps its own tables, as an outside system would.
+            await services.GetRequiredService<FakePaymentProvider>().EnsureCreatedAsync(ct);
         }
         finally
         {

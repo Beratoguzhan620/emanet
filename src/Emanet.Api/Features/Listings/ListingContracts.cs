@@ -14,7 +14,8 @@ public sealed record ListingRequest(
     double Longitude,
     string Area,
     int MinDays,
-    int MaxDays);
+    int MaxDays,
+    bool InstantBook = false);
 
 /// <summary>
 /// Where an item is. <c>exact</c> is true only for its owner (and, later, a renter with a confirmed rental);
@@ -55,6 +56,7 @@ public sealed record ListingResponse(
     decimal Deposit,
     int MinDays,
     int MaxDays,
+    bool InstantBook,
     PlaceResponse Place,
     IReadOnlyList<PhotoResponse> Photos,
     OwnerResponse Owner,

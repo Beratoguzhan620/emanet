@@ -67,6 +67,9 @@ public sealed class Listing
 
     public int MaxDaysPerRental { get; private set; }
 
+    /// <summary>Requests for free dates are confirmed at once, without waiting for the owner.</summary>
+    public bool InstantBook { get; private set; }
+
     public ListingStatus Status { get; private set; }
 
     public int RatingSum { get; private set; }
@@ -79,16 +82,16 @@ public sealed class Listing
 
     public static Listing Create(
         Guid ownerId, string title, string? description, Category category, long pricePerDayMinor, int weeklyPercentOff, long depositMinor,
-        double latitude, double longitude, string area, int minDays, int maxDays, DateTimeOffset now)
+        double latitude, double longitude, string area, int minDays, int maxDays, DateTimeOffset now, bool instantBook = false)
     {
         var listing = new Listing { Id = Guid.CreateVersion7(now), OwnerId = ownerId, Status = ListingStatus.Active, CreatedAt = now };
-        listing.Change(title, description, category, pricePerDayMinor, weeklyPercentOff, depositMinor, latitude, longitude, area, minDays, maxDays, now);
+        listing.Change(title, description, category, pricePerDayMinor, weeklyPercentOff, depositMinor, latitude, longitude, area, minDays, maxDays, now, instantBook);
         return listing;
     }
 
     public void Change(
         string title, string? description, Category category, long pricePerDayMinor, int weeklyPercentOff, long depositMinor,
-        double latitude, double longitude, string area, int minDays, int maxDays, DateTimeOffset now)
+        double latitude, double longitude, string area, int minDays, int maxDays, DateTimeOffset now, bool instantBook = false)
     {
         EnsureNotRemoved();
         if (!Enum.IsDefined(category))
@@ -128,6 +131,7 @@ public sealed class Listing
         Area = Text.Clean(area, 2, AreaMax, "An area");
         MinDays = minDays;
         MaxDaysPerRental = maxDays;
+        InstantBook = instantBook;
         UpdatedAt = now;
     }
 

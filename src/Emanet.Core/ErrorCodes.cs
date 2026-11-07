@@ -13,4 +13,5 @@ public static class ErrorCodes
     public const string RateLimited = "rate_limited";
     public const string NotYourListing = "not_your_listing";
     public const string Unavailable = "unavailable";
+    public const string PaymentDeclined = "payment_declined";
 }

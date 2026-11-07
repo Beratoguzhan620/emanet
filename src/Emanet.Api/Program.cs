@@ -4,6 +4,7 @@ using System.Text.Unicode;
 using System.Threading.RateLimiting;
 using Emanet.Api.Common;
 using Emanet.Api.Features.Auth;
+using Emanet.Api.Features.Bookings;
 using Emanet.Api.Features.Listings;
 using Emanet.Api.Logging;
 using Emanet.Infrastructure;
@@ -34,6 +35,13 @@ builder.Services.AddEmanetPersistence(connectionString);
 builder.Services.AddEmanetAuth(builder.Configuration);
 
 builder.Services.AddEmanetStorage(builder.Configuration);
+builder.Services.AddScoped<BookingService>();
+builder.Services.Configure<SweeperOptions>(builder.Configuration.GetSection(SweeperOptions.Section));
+builder.Services.AddSingleton<BookingSweeper>();
+if (builder.Configuration.GetValue($"{SweeperOptions.Section}:Enabled", true))
+{
+    builder.Services.AddHostedService<SweeperWorker>();
+}
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -102,6 +110,8 @@ app.MapGet("/", () => Results.Redirect("/scalar")).ExcludeFromDescription();
 app.MapAuthEndpoints();
 app.MapListingEndpoints();
 app.MapPhotoEndpoints();
+app.MapBookingEndpoints();
+app.MapLedgerEndpoints();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
