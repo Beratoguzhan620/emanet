@@ -22,8 +22,320 @@ namespace Emanet.Infrastructure.Persistence.Migrations
                 .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
+            NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "btree_gist");
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "postgis");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+
+            modelBuilder.Entity("Emanet.Core.Bookings.Booking", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_at");
+
+                    b.Property<DateTimeOffset?>("ConfirmedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("confirmed_at");
+
+                    b.Property<int>("Days")
+                        .HasColumnType("integer")
+                        .HasColumnName("days");
+
+                    b.Property<string>("DepositHoldId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("deposit_hold_id");
+
+                    b.Property<long>("DepositMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("deposit_minor");
+
+                    b.Property<DateOnly>("End")
+                        .HasColumnType("date")
+                        .HasColumnName("end_date");
+
+                    b.Property<long>("FeeMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("fee_minor");
+
+                    b.Property<DateTimeOffset?>("HoldsReleasedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("holds_released_at");
+
+                    b.Property<Guid>("ListingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("listing_id");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("message");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
+                    b.Property<string>("PaymentMethod")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("payment_method");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("reason");
+
+                    b.Property<long>("RefundMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("refund_minor");
+
+                    b.Property<DateTimeOffset?>("RefundedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("refunded_at");
+
+                    b.Property<DateTimeOffset?>("RentChargedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("rent_charged_at");
+
+                    b.Property<string>("RentHoldId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("rent_hold_id");
+
+                    b.Property<long>("RentMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("rent_minor");
+
+                    b.Property<Guid>("RenterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("renter_id");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("requested_at");
+
+                    b.Property<DateTimeOffset>("RespondBy")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("respond_by");
+
+                    b.Property<DateOnly>("Start")
+                        .HasColumnType("date")
+                        .HasColumnName("start_date");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("status");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_bookings");
+
+                    b.HasIndex("RespondBy")
+                        .HasDatabaseName("ix_bookings_respond_by")
+                        .HasFilter("status = 'Requested'");
+
+                    b.HasIndex("ListingId", "Status")
+                        .HasDatabaseName("ix_bookings_listing_id_status");
+
+                    b.HasIndex("OwnerId", "RequestedAt")
+                        .HasDatabaseName("ix_bookings_owner_id_requested_at");
+
+                    b.HasIndex("RenterId", "RequestedAt")
+                        .HasDatabaseName("ix_bookings_renter_id_requested_at");
+
+                    b.ToTable("bookings", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_bookings_amounts", "rent_minor > 0 AND fee_minor >= 0 AND fee_minor <= rent_minor AND deposit_minor >= 0 AND refund_minor BETWEEN 0 AND rent_minor");
+
+                            t.HasCheckConstraint("ck_bookings_end_after_start", "end_date > start_date");
+                        });
+                });
+
+            modelBuilder.Entity("Emanet.Core.Bookings.BookingEvent", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<Guid?>("ActorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_id");
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("at");
+
+                    b.Property<Guid>("BookingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("booking_id");
+
+                    b.Property<string>("Detail")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("detail");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("kind");
+
+                    b.HasKey("Id")
+                        .HasName("pk_booking_events");
+
+                    b.HasIndex("BookingId", "Id")
+                        .HasDatabaseName("ix_booking_events_booking_id_id");
+
+                    b.ToTable("booking_events", (string)null);
+                });
+
+            modelBuilder.Entity("Emanet.Core.Bookings.CalendarEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("BookingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("booking_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateOnly>("End")
+                        .HasColumnType("date")
+                        .HasColumnName("end_date");
+
+                    b.Property<Guid>("ListingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("listing_id");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("note");
+
+                    b.Property<DateOnly>("Start")
+                        .HasColumnType("date")
+                        .HasColumnName("start_date");
+
+                    b.HasKey("Id")
+                        .HasName("pk_calendar");
+
+                    b.HasIndex("BookingId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_calendar_booking_id");
+
+                    b.HasIndex("ListingId")
+                        .HasDatabaseName("ix_calendar_listing_id");
+
+                    b.ToTable("calendar", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_calendar_end_after_start", "end_date > start_date");
+                        });
+                });
+
+            modelBuilder.Entity("Emanet.Core.Ledger.JournalEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("BookingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("booking_id");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("key");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Memo")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("memo");
+
+                    b.Property<DateTimeOffset>("PostedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("posted_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_journal");
+
+                    b.HasIndex("BookingId")
+                        .HasDatabaseName("ix_journal_booking_id");
+
+                    b.HasIndex("Key")
+                        .IsUnique()
+                        .HasDatabaseName("ix_journal_key");
+
+                    b.ToTable("journal", (string)null);
+                });
+
+            modelBuilder.Entity("Emanet.Core.Ledger.LedgerLine", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Account")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("account");
+
+                    b.Property<long>("Amount")
+                        .HasColumnType("bigint")
+                        .HasColumnName("amount");
+
+                    b.Property<Guid>("EntryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entry_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ledger_lines");
+
+                    b.HasIndex("EntryId")
+                        .HasDatabaseName("ix_ledger_lines_entry_id");
+
+                    b.HasIndex("Account", "Id")
+                        .HasDatabaseName("ix_ledger_lines_account_id");
+
+                    b.ToTable("ledger_lines", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_ledger_lines_not_zero", "amount <> 0");
+                        });
+                });
 
             modelBuilder.Entity("Emanet.Core.Listings.Listing", b =>
                 {
@@ -56,6 +368,10 @@ namespace Emanet.Infrastructure.Persistence.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)")
                         .HasColumnName("description");
+
+                    b.Property<bool>("InstantBook")
+                        .HasColumnType("boolean")
+                        .HasColumnName("instant_book");
 
                     b.Property<Point>("Location")
                         .IsRequired()
@@ -222,6 +538,66 @@ namespace Emanet.Infrastructure.Persistence.Migrations
                     b.ToTable("users", (string)null);
                 });
 
+            modelBuilder.Entity("Emanet.Core.Bookings.Booking", b =>
+                {
+                    b.HasOne("Emanet.Core.Listings.Listing", null)
+                        .WithMany()
+                        .HasForeignKey("ListingId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_bookings_listings_listing_id");
+
+                    b.HasOne("Emanet.Core.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_bookings_users_owner_id");
+
+                    b.HasOne("Emanet.Core.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("RenterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_bookings_users_renter_id");
+                });
+
+            modelBuilder.Entity("Emanet.Core.Bookings.BookingEvent", b =>
+                {
+                    b.HasOne("Emanet.Core.Bookings.Booking", null)
+                        .WithMany()
+                        .HasForeignKey("BookingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_booking_events_bookings_booking_id");
+                });
+
+            modelBuilder.Entity("Emanet.Core.Bookings.CalendarEntry", b =>
+                {
+                    b.HasOne("Emanet.Core.Bookings.Booking", null)
+                        .WithOne()
+                        .HasForeignKey("Emanet.Core.Bookings.CalendarEntry", "BookingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("fk_calendar_bookings_booking_id");
+
+                    b.HasOne("Emanet.Core.Listings.Listing", null)
+                        .WithMany()
+                        .HasForeignKey("ListingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_calendar_listings_listing_id");
+                });
+
+            modelBuilder.Entity("Emanet.Core.Ledger.LedgerLine", b =>
+                {
+                    b.HasOne("Emanet.Core.Ledger.JournalEntry", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("EntryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_ledger_lines_journal_entry_id");
+                });
+
             modelBuilder.Entity("Emanet.Core.Listings.Listing", b =>
                 {
                     b.HasOne("Emanet.Core.Users.User", null)
@@ -240,6 +616,11 @@ namespace Emanet.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_listing_photos_listings_listing_id");
+                });
+
+            modelBuilder.Entity("Emanet.Core.Ledger.JournalEntry", b =>
+                {
+                    b.Navigation("Lines");
                 });
 #pragma warning restore 612, 618
         }
