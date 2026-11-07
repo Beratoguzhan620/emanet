@@ -32,6 +32,20 @@ namespace Emanet.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<long>("ClaimMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("claim_minor");
+
+                    b.Property<string>("ClaimNote")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("claim_note");
+
+                    b.Property<DateTimeOffset?>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("claimed_at");
+
                     b.Property<DateTimeOffset?>("ClosedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("closed_at");
@@ -39,6 +53,10 @@ namespace Emanet.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("ConfirmedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("confirmed_at");
+
+                    b.Property<long>("DamageMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("damage_minor");
 
                     b.Property<int>("Days")
                         .HasColumnType("integer")
@@ -52,6 +70,10 @@ namespace Emanet.Infrastructure.Persistence.Migrations
                     b.Property<long>("DepositMinor")
                         .HasColumnType("bigint")
                         .HasColumnName("deposit_minor");
+
+                    b.Property<DateTimeOffset?>("DepositSettledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deposit_settled_at");
 
                     b.Property<DateOnly>("End")
                         .HasColumnType("date")
@@ -85,6 +107,15 @@ namespace Emanet.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("payment_method");
 
+                    b.Property<DateTimeOffset?>("PickedUpAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("picked_up_at");
+
+                    b.Property<string>("PickupCode")
+                        .HasMaxLength(6)
+                        .HasColumnType("character varying(6)")
+                        .HasColumnName("pickup_code");
+
                     b.Property<string>("Reason")
                         .IsRequired()
                         .HasMaxLength(300)
@@ -112,6 +143,17 @@ namespace Emanet.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("rent_minor");
 
+                    b.Property<string>("RenterAnswer")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("renter_answer");
+
+                    b.Property<string>("RenterAnswerNote")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("renter_answer_note");
+
                     b.Property<Guid>("RenterId")
                         .HasColumnType("uuid")
                         .HasColumnName("renter_id");
@@ -123,6 +165,15 @@ namespace Emanet.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("RespondBy")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("respond_by");
+
+                    b.Property<string>("ReturnCode")
+                        .HasMaxLength(6)
+                        .HasColumnType("character varying(6)")
+                        .HasColumnName("return_code");
+
+                    b.Property<DateTimeOffset?>("ReturnedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("returned_at");
 
                     b.Property<DateOnly>("Start")
                         .HasColumnType("date")
@@ -140,12 +191,20 @@ namespace Emanet.Infrastructure.Persistence.Migrations
                         .HasColumnType("xid")
                         .HasColumnName("xmin");
 
+                    b.Property<int>("WrongCodes")
+                        .HasColumnType("integer")
+                        .HasColumnName("wrong_codes");
+
                     b.HasKey("Id")
                         .HasName("pk_bookings");
 
                     b.HasIndex("RespondBy")
                         .HasDatabaseName("ix_bookings_respond_by")
                         .HasFilter("status = 'Requested'");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_bookings_open")
+                        .HasFilter("status IN ('Confirmed', 'Returned', 'Disputed') OR (status = 'Completed' AND deposit_settled_at IS NULL)");
 
                     b.HasIndex("ListingId", "Status")
                         .HasDatabaseName("ix_bookings_listing_id_status");
@@ -159,6 +218,8 @@ namespace Emanet.Infrastructure.Persistence.Migrations
                     b.ToTable("bookings", null, t =>
                         {
                             t.HasCheckConstraint("ck_bookings_amounts", "rent_minor > 0 AND fee_minor >= 0 AND fee_minor <= rent_minor AND deposit_minor >= 0 AND refund_minor BETWEEN 0 AND rent_minor");
+
+                            t.HasCheckConstraint("ck_bookings_claims", "claim_minor BETWEEN 0 AND deposit_minor AND damage_minor BETWEEN 0 AND claim_minor");
 
                             t.HasCheckConstraint("ck_bookings_end_after_start", "end_date > start_date");
                         });
@@ -252,6 +313,50 @@ namespace Emanet.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_calendar_end_after_start", "end_date > start_date");
                         });
+                });
+
+            modelBuilder.Entity("Emanet.Core.Bookings.HandoverPhoto", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("BookingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("booking_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("Height")
+                        .HasColumnType("integer")
+                        .HasColumnName("height");
+
+                    b.Property<string>("Stage")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("stage");
+
+                    b.Property<Guid>("UploaderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("uploader_id");
+
+                    b.Property<int>("Width")
+                        .HasColumnType("integer")
+                        .HasColumnName("width");
+
+                    b.HasKey("Id")
+                        .HasName("pk_handover_photos");
+
+                    b.HasIndex("UploaderId")
+                        .HasDatabaseName("ix_handover_photos_uploader_id");
+
+                    b.HasIndex("BookingId", "Stage", "CreatedAt")
+                        .HasDatabaseName("ix_handover_photos_booking_id_stage_created_at");
+
+                    b.ToTable("handover_photos", (string)null);
                 });
 
             modelBuilder.Entity("Emanet.Core.Ledger.JournalEntry", b =>
@@ -500,6 +605,70 @@ namespace Emanet.Infrastructure.Persistence.Migrations
                     b.ToTable("listing_photos", (string)null);
                 });
 
+            modelBuilder.Entity("Emanet.Core.Reviews.Review", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AuthorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("author_id");
+
+                    b.Property<Guid>("BookingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("booking_id");
+
+                    b.Property<string>("Comment")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("comment");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("ListingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("listing_id");
+
+                    b.Property<int>("Stars")
+                        .HasColumnType("integer")
+                        .HasColumnName("stars");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("subject");
+
+                    b.Property<Guid>("SubjectUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_reviews");
+
+                    b.HasIndex("AuthorId")
+                        .HasDatabaseName("ix_reviews_author_id");
+
+                    b.HasIndex("BookingId", "AuthorId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_reviews_booking_id_author_id");
+
+                    b.HasIndex("ListingId", "Subject", "CreatedAt")
+                        .HasDatabaseName("ix_reviews_listing_id_subject_created_at");
+
+                    b.HasIndex("SubjectUserId", "Subject", "CreatedAt")
+                        .HasDatabaseName("ix_reviews_subject_user_id_subject_created_at");
+
+                    b.ToTable("reviews", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_reviews_stars", "stars BETWEEN 1 AND 5");
+                        });
+                });
+
             modelBuilder.Entity("Emanet.Core.Users.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -527,6 +696,14 @@ namespace Emanet.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("password_hash");
+
+                    b.Property<int>("RatingCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("rating_count");
+
+                    b.Property<int>("RatingSum")
+                        .HasColumnType("integer")
+                        .HasColumnName("rating_sum");
 
                     b.HasKey("Id")
                         .HasName("pk_users");
@@ -588,6 +765,23 @@ namespace Emanet.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_calendar_listings_listing_id");
                 });
 
+            modelBuilder.Entity("Emanet.Core.Bookings.HandoverPhoto", b =>
+                {
+                    b.HasOne("Emanet.Core.Bookings.Booking", null)
+                        .WithMany()
+                        .HasForeignKey("BookingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_handover_photos_bookings_booking_id");
+
+                    b.HasOne("Emanet.Core.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UploaderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_handover_photos_users_uploader_id");
+                });
+
             modelBuilder.Entity("Emanet.Core.Ledger.LedgerLine", b =>
                 {
                     b.HasOne("Emanet.Core.Ledger.JournalEntry", null)
@@ -616,6 +810,37 @@ namespace Emanet.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_listing_photos_listings_listing_id");
+                });
+
+            modelBuilder.Entity("Emanet.Core.Reviews.Review", b =>
+                {
+                    b.HasOne("Emanet.Core.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("AuthorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_reviews_users_author_id");
+
+                    b.HasOne("Emanet.Core.Bookings.Booking", null)
+                        .WithMany()
+                        .HasForeignKey("BookingId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_reviews_bookings_booking_id");
+
+                    b.HasOne("Emanet.Core.Listings.Listing", null)
+                        .WithMany()
+                        .HasForeignKey("ListingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_reviews_listings_listing_id");
+
+                    b.HasOne("Emanet.Core.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("SubjectUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_reviews_users_subject_user_id");
                 });
 
             modelBuilder.Entity("Emanet.Core.Ledger.JournalEntry", b =>
