@@ -22,6 +22,7 @@ describe("format", () => {
   it("writes ranges briefly", () => {
     expect(formatRange("2026-11-11", "2026-11-14")).toBe("11–14 Nov");
     expect(formatRange("2026-11-28", "2026-12-02")).toBe("28 Nov – 2 Dec");
+    expect(formatRange("2026-11-13", "2026-11-13")).toBe("13 Nov");
   });
 
   it("takes initials the Turkish way", () => {

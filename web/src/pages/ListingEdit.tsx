@@ -6,7 +6,7 @@ import { Dialog } from "../components/Dialog";
 import { MapView } from "../components/MapView";
 import { Failed, Loading } from "../components/States";
 import { useLoad } from "../hooks";
-import { categories, categoryLabel, formatRange, today } from "../format";
+import { addDays, categories, categoryLabel, formatRange, today } from "../format";
 import { linkProps, navigate } from "../router";
 import type { Listing, ListingInput } from "../types";
 
@@ -171,7 +171,7 @@ function Availability({ listing }: { listing: Listing }) {
       {pick.start && pick.end && (
         <div className="row gap-6 wrap">
           <input className="input grow" placeholder="Note for yourself (optional)" value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} />
-          <button className="button" onClick={() => void close()}>Close {formatRange(pick.start, pick.end)}</button>
+          <button className="button" onClick={() => void close()}>Close {formatRange(pick.start, addDays(pick.end, -1))}</button>
         </div>
       )}
       {error && <p className="form-error" role="alert">{error}</p>}
@@ -179,7 +179,7 @@ function Availability({ listing }: { listing: Listing }) {
         <ul className="plain-list">
           {closed.map((r) => (
             <li key={r.id} className="row between">
-              <span>{formatRange(r.start, r.end)}{r.note ? <span className="muted"> · {r.note}</span> : null}</span>
+              <span>Closed {formatRange(r.start, addDays(r.end, -1))}{r.note ? <span className="muted"> · {r.note}</span> : null}</span>
               <button className="button small" onClick={() => void api.unblock(listing.id, r.id!).then(reload, (e: Error) => setError(e.message))}>Open again</button>
             </li>
           ))}
