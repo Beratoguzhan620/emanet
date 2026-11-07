@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Emanet.Core/Emanet.Core.csproj" />
+    <Project Path="src/Emanet.Infrastructure/Emanet.Infrastructure.csproj" />
+    <Project Path="src/Emanet.Api/Emanet.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Emanet.UnitTests/Emanet.UnitTests.csproj" />
+    <Project Path="tests/Emanet.IntegrationTests/Emanet.IntegrationTests.csproj" />
+  </Folder>
+</Solution>
