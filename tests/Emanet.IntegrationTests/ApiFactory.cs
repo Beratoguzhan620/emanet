@@ -31,6 +31,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
     public const string AdminEmail = "books@example.com";
 
+    /// <summary>A second administrator, for the claims tests.</summary>
+    public const string SupportEmail = "support@example.com";
+
     /// <summary>The payment provider every request uses; tests can make it fail.</summary>
     public FlakyPayments Payments => Services.GetRequiredService<FlakyPayments>();
 
@@ -47,6 +50,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         // Tests run the sweeper themselves, one pass at a time.
         builder.UseSetting("Sweeper:Enabled", "false");
         builder.UseSetting("Admin:Emails:0", AdminEmail);
+        builder.UseSetting("Admin:Emails:1", SupportEmail);
         builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<TimeProvider>();

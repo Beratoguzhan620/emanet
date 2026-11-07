@@ -13,7 +13,21 @@ public sealed record ReasonRequest(string? Reason);
 
 public sealed record BlockRequest(DateOnly Start, DateOnly End, string? Note);
 
-public sealed record PartyResponse(Guid Id, string Name);
+/// <summary>One side of a rental. The rating is what owners gave this person as a renter.</summary>
+public sealed record PartyResponse(Guid Id, string Name, double? Rating = null, int RatingCount = 0);
+
+/// <summary>The code from the other person's screen, typed in at the handover.</summary>
+public sealed record CodeRequest(string? Code);
+
+/// <summary>What the damage cost, in TL, and what happened. At most the deposit.</summary>
+public sealed record ClaimRequest(decimal Amount, string? Note);
+
+public sealed record AnswerRequest(string? Note);
+
+/// <summary>An administrator's decision: how much of the claim, in TL, is taken from the deposit.</summary>
+public sealed record ResolveRequest(decimal Amount, string? Note);
+
+public sealed record ReviewRequest(int Stars, string? Comment);
 
 public sealed record BookingListingResponse(Guid Id, string Title, string? ThumbUrl, string Area);
 
@@ -26,7 +40,29 @@ public sealed record CalendarRange(Guid? Id, DateOnly Start, DateOnly End, strin
 public sealed record BookingEventResponse(long Id, BookingEventKind Kind, string? ActorName, DateTimeOffset At, string Detail);
 
 /// <summary>Where the money stands: the rent charge, any refund, and the holds on the renter's card.</summary>
-public sealed record PaymentResponse(bool RentCharged, decimal Refund, bool Refunded, bool HoldsReleased);
+public sealed record PaymentResponse(bool RentCharged, decimal Refund, bool Refunded, bool HoldsReleased, decimal DepositCharged, bool DepositSettled);
+
+/// <summary>
+/// The handover. The renter sees the pickup code (to show the owner), the owner sees the return code (to show the
+/// renter); each is typed in by the other side, so neither can say a handover happened alone.
+/// </summary>
+public sealed record HandoverResponse(
+    string? PickupCode, string? ReturnCode, DateTimeOffset? PickedUpAt, DateTimeOffset? ReturnedAt, DateTimeOffset? ClaimBy,
+    bool CanPickUp, bool CanGiveBack, bool CanReportDamage, bool CanSignOff);
+
+public sealed record ClaimResponse(
+    decimal Amount, string Note, DateTimeOffset ClaimedAt, DateTimeOffset AnswerBy, ClaimAnswer? Answer, string AnswerNote, decimal? Taken, bool CanAnswer);
+
+public sealed record HandoverPhotoResponse(Guid Id, HandoverStage Stage, string By, string Url, string ThumbUrl, int Width, int Height, DateTimeOffset At);
+
+public sealed record ReviewResponse(Guid Id, string AuthorName, int Stars, string Comment, DateTimeOffset At);
+
+public sealed record BookingReviews(bool CanReview, ReviewResponse? Mine, ReviewResponse? Theirs);
+
+/// <summary>A claim waiting for an administrator, or for the renter.</summary>
+public sealed record DisputeSummary(
+    Guid BookingId, string ListingTitle, PartyResponse Owner, PartyResponse Renter, decimal Deposit, decimal Claim, string Note, DateTimeOffset ClaimedAt,
+    ClaimAnswer? Answer, string AnswerNote, int Photos);
 
 /// <summary>
 /// One rental, as its owner or renter sees it. The fee and the owner's share are for the owner's eyes. The place is
@@ -55,7 +91,11 @@ public sealed record BookingResponse(
     bool IsOwner,
     bool CanAccept,
     bool CanCancel,
-    IReadOnlyList<BookingEventResponse> History);
+    IReadOnlyList<BookingEventResponse> History,
+    HandoverResponse Handover,
+    ClaimResponse? Claim,
+    IReadOnlyList<HandoverPhotoResponse> Photos,
+    BookingReviews Reviews);
 
 public sealed record BookingSummary(
     Guid Id, BookingListingResponse Listing, PartyResponse Other, DateOnly Start, DateOnly End, int Days, decimal Rent, BookingStatus Status, bool IsOwner,

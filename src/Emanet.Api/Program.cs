@@ -112,6 +112,8 @@ app.MapListingEndpoints();
 app.MapPhotoEndpoints();
 app.MapBookingEndpoints();
 app.MapLedgerEndpoints();
+app.MapHandoverEndpoints();
+app.MapAdminEndpoints();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });

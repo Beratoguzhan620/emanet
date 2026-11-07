@@ -109,7 +109,7 @@ internal static class PhotoEndpoints
         return TypedResults.File(bytes, "image/jpeg", entityTag: new EntityTagHeaderValue($"\"{photo!.Id:N}{(thumb ? "t" : "f")}\""));
     }
 
-    private static async Task<byte[]> ReadAsync(Stream body, long max, CancellationToken ct)
+    internal static async Task<byte[]> ReadAsync(Stream body, long max, CancellationToken ct)
     {
         using var copy = new MemoryStream();
         var buffer = new byte[81920];
