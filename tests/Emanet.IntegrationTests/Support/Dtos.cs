@@ -24,18 +24,35 @@ public sealed record ListingDto(
 
 public sealed record CategoryDto(string Key, int ActiveListings);
 
-public sealed record PartyDto(Guid Id, string Name);
+public sealed record PartyDto(Guid Id, string Name, double? Rating, int RatingCount);
 
 public sealed record BookingListingDto(Guid Id, string Title, string? ThumbUrl, string Area);
 
-public sealed record PaymentDto(bool RentCharged, decimal Refund, bool Refunded, bool HoldsReleased);
+public sealed record PaymentDto(bool RentCharged, decimal Refund, bool Refunded, bool HoldsReleased, decimal DepositCharged, bool DepositSettled);
+
+public sealed record HandoverDto(
+    string? PickupCode, string? ReturnCode, DateTimeOffset? PickedUpAt, DateTimeOffset? ReturnedAt, DateTimeOffset? ClaimBy,
+    bool CanPickUp, bool CanGiveBack, bool CanReportDamage, bool CanSignOff);
+
+public sealed record ClaimDto(decimal Amount, string Note, DateTimeOffset ClaimedAt, DateTimeOffset AnswerBy, string? Answer, string AnswerNote, decimal? Taken, bool CanAnswer);
+
+public sealed record HandoverPhotoDto(Guid Id, string Stage, string By, string Url, string ThumbUrl, int Width, int Height, DateTimeOffset At);
+
+public sealed record ReviewDto(Guid Id, string AuthorName, int Stars, string Comment, DateTimeOffset At);
+
+public sealed record BookingReviewsDto(bool CanReview, ReviewDto? Mine, ReviewDto? Theirs);
+
+public sealed record DisputeDto(
+    Guid BookingId, string ListingTitle, PartyDto Owner, PartyDto Renter, decimal Deposit, decimal Claim, string Note, DateTimeOffset ClaimedAt,
+    string? Answer, string AnswerNote, int Photos);
 
 public sealed record BookingEventDto(long Id, string Kind, string? ActorName, DateTimeOffset At, string Detail);
 
 public sealed record BookingDto(
     Guid Id, BookingListingDto Listing, PartyDto Owner, PartyDto Renter, DateOnly Start, DateOnly End, int Days, decimal Rent, decimal Deposit, decimal? Fee,
     decimal? OwnerShare, string Status, string Message, string Reason, PlaceDto Place, PaymentDto Payment, DateTimeOffset RequestedAt, DateTimeOffset RespondBy,
-    DateTimeOffset? ConfirmedAt, bool IsOwner, bool CanAccept, bool CanCancel, List<BookingEventDto> History);
+    DateTimeOffset? ConfirmedAt, bool IsOwner, bool CanAccept, bool CanCancel, List<BookingEventDto> History, HandoverDto Handover, ClaimDto? Claim,
+    List<HandoverPhotoDto> Photos, BookingReviewsDto Reviews);
 
 public sealed record BookingSummaryDto(
     Guid Id, BookingListingDto Listing, PartyDto Other, DateOnly Start, DateOnly End, int Days, decimal Rent, string Status, bool IsOwner,

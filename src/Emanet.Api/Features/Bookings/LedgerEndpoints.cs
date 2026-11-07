@@ -42,12 +42,7 @@ internal static class LedgerEndpoints
 
     private static async Task<Ok<BooksResponse>> Books(ClaimsPrincipal user, EmanetDbContext db, IPaymentProvider payments, IConfiguration configuration, CancellationToken ct)
     {
-        var me = await db.Users.AsNoTracking().Where(u => u.Id == user.UserId()).Select(u => u.Email).SingleAsync(ct);
-        var admins = configuration.GetSection("Admin:Emails").Get<string[]>() ?? [];
-        if (!admins.Any(a => string.Equals(a.Trim(), me, StringComparison.OrdinalIgnoreCase)))
-        {
-            throw new DomainException(ErrorCodes.Forbidden, "Only administrators can see the books.");
-        }
+        await user.RequireAdminAsync(db, configuration, ct);
 
         var entries = await db.Journal.CountAsync(ct);
         var unbalanced = await db.LedgerLines.AsNoTracking().GroupBy(l => l.EntryId).CountAsync(g => g.Sum(l => l.Amount) != 0, ct);

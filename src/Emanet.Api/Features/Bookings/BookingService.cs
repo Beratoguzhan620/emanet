@@ -156,6 +156,87 @@ public sealed partial class BookingService(EmanetDbContext db, IPaymentProvider 
         });
     }
 
+    /// <summary>The owner hands the item over, with the renter's code.</summary>
+    public Task PickUpAsync(Guid bookingId, Guid ownerId, string? code, CancellationToken ct) =>
+        ChangeWithCodeAsync(bookingId, ct, booking =>
+        {
+            booking.PickUp(ownerId, code, clock.GetUtcNow());
+            return BookingEvent.Record(booking, BookingEventKind.PickedUp, ownerId, clock.GetUtcNow());
+        });
+
+    /// <summary>The renter gives the item back, with the owner's code.</summary>
+    public Task GiveBackAsync(Guid bookingId, Guid renterId, string? code, CancellationToken ct) =>
+        ChangeWithCodeAsync(bookingId, ct, booking =>
+        {
+            booking.GiveBack(renterId, code, clock.GetUtcNow());
+            return BookingEvent.Record(booking, BookingEventKind.Returned, renterId, clock.GetUtcNow());
+        });
+
+    public Task ReportDamageAsync(Guid bookingId, Guid ownerId, long amount, string? note, CancellationToken ct) =>
+        ChangeAsync(bookingId, ct, booking =>
+        {
+            booking.ReportDamage(ownerId, amount, note, clock.GetUtcNow());
+            return BookingEvent.Record(booking, BookingEventKind.DamageReported, ownerId, clock.GetUtcNow(), $"{amount / 100m:0.00} TL claimed");
+        });
+
+    public Task AllGoodAsync(Guid bookingId, Guid ownerId, CancellationToken ct) =>
+        ChangeAsync(bookingId, ct, booking =>
+        {
+            booking.AllGood(ownerId, clock.GetUtcNow());
+            return BookingEvent.Record(booking, BookingEventKind.Completed, ownerId, clock.GetUtcNow(), booking.Reason);
+        });
+
+    public Task AcceptClaimAsync(Guid bookingId, Guid renterId, CancellationToken ct) =>
+        ChangeAsync(bookingId, ct, booking =>
+        {
+            booking.AcceptClaim(renterId, clock.GetUtcNow());
+            return BookingEvent.Record(booking, BookingEventKind.ClaimAccepted, renterId, clock.GetUtcNow(), $"{booking.DamageMinor / 100m:0.00} TL");
+        });
+
+    public Task RejectClaimAsync(Guid bookingId, Guid renterId, string? note, CancellationToken ct) =>
+        ChangeAsync(bookingId, ct, booking =>
+        {
+            booking.RejectClaim(renterId, note, clock.GetUtcNow());
+            return BookingEvent.Record(booking, BookingEventKind.ClaimRejected, renterId, clock.GetUtcNow(), "An administrator will decide.");
+        });
+
+    public Task ResolveAsync(Guid bookingId, Guid adminId, long amount, string? note, CancellationToken ct) =>
+        ChangeAsync(bookingId, ct, booking =>
+        {
+            booking.Resolve(amount, note, clock.GetUtcNow());
+            return BookingEvent.Record(booking, BookingEventKind.ClaimSettled, adminId, clock.GetUtcNow(), $"{amount / 100m:0.00} TL of {booking.ClaimMinor / 100m:0.00} TL");
+        });
+
+    /// <summary>Rentals the clock finishes: no damage reported in time, a claim left unanswered, an item never picked up.</summary>
+    public async Task<int> LapseAsync(CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        var returnedBefore = now - Booking.ClaimWithin;
+        var claimedBefore = now - Booking.AnswerClaimWithin;
+        var today = Clock.Today(now);
+        var due = await db.Bookings.AsNoTracking()
+            .Where(b => (b.Status == BookingStatus.Returned && b.ReturnedAt <= returnedBefore)
+                || (b.Status == BookingStatus.Disputed && b.RenterAnswer == null && b.ClaimedAt <= claimedBefore)
+                || (b.Status == BookingStatus.Confirmed && b.End <= today))
+            .OrderBy(b => b.RequestedAt).Select(b => b.Id).Take(500).ToListAsync(ct);
+        var lapsed = 0;
+        foreach (var id in due)
+        {
+            await ChangeAsync(id, ct, booking =>
+            {
+                if (!booking.Lapse(now))
+                {
+                    return null;
+                }
+
+                lapsed++;
+                return BookingEvent.Record(booking, BookingEventKind.Completed, null, now, booking.Reason);
+            });
+        }
+
+        return lapsed;
+    }
+
     /// <summary>Requests the owner did not answer in time lapse, and their holds are let go.</summary>
     public async Task<int> ExpireAsync(CancellationToken ct)
     {
@@ -185,7 +266,8 @@ public sealed partial class BookingService(EmanetDbContext db, IPaymentProvider 
         var due = await db.Bookings.AsNoTracking()
             .Where(b => (b.RentChargedAt == null && b.ConfirmedAt != null)
                 || (b.RefundMinor > 0 && b.RefundedAt == null)
-                || (b.HoldsReleasedAt == null && (b.Status == BookingStatus.Declined || b.Status == BookingStatus.Expired || b.Status == BookingStatus.Cancelled)))
+                || (b.HoldsReleasedAt == null && (b.Status == BookingStatus.Declined || b.Status == BookingStatus.Expired || b.Status == BookingStatus.Cancelled))
+                || (b.Status == BookingStatus.Completed && b.DepositSettledAt == null))
             .OrderBy(b => b.RequestedAt).Select(b => b.Id).Take(500).ToListAsync(ct);
         await SettleAllAsync(due, ct);
         return due.Count;
@@ -235,6 +317,27 @@ public sealed partial class BookingService(EmanetDbContext db, IPaymentProvider 
             db.BookingEvents.Add(BookingEvent.Record(booking, BookingEventKind.HoldsReleased, null, now));
         }
 
+        // The rent is charged before the deposit is touched, so the books always show the rental before any damage.
+        if (booking.OwesDepositSettlement && booking.RentChargedAt is not null)
+        {
+            if (booking.DepositHoldId is { } deposit && booking.DamageMinor > 0)
+            {
+                // Taking part of a hold lets the rest go, as card holds do.
+                await payments.CaptureAsync(deposit, booking.DamageMinor, $"booking:{booking.Id}:capture-deposit", ct);
+                db.Journal.Add(JournalEntry.DamageCharged(booking.Id, booking.OwnerId, booking.DamageMinor, now));
+                var rest = booking.DepositMinor - booking.DamageMinor;
+                db.BookingEvents.Add(BookingEvent.Record(booking, BookingEventKind.DepositCharged, null, now,
+                    rest > 0 ? $"{booking.DamageMinor / 100m:0.00} TL for damage; {rest / 100m:0.00} TL let go" : $"{booking.DamageMinor / 100m:0.00} TL for damage"));
+            }
+            else if (booking.DepositHoldId is { } untouched)
+            {
+                await payments.ReleaseAsync(untouched, $"booking:{booking.Id}:release-deposit", ct);
+                db.BookingEvents.Add(BookingEvent.Record(booking, BookingEventKind.DepositReleased, null, now, $"{booking.DepositMinor / 100m:0.00} TL"));
+            }
+
+            booking.DepositSettled(now);
+        }
+
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
     }
@@ -253,6 +356,34 @@ public sealed partial class BookingService(EmanetDbContext db, IPaymentProvider 
                 LogSettleFailed(logger, ex, id);
             }
         }
+    }
+
+    /// <summary>Like a change, but a wrong code is counted (and the code replaced after too many) before the error goes back.</summary>
+    private async Task ChangeWithCodeAsync(Guid bookingId, CancellationToken ct, Func<Booking, BookingEvent?> change)
+    {
+        db.ChangeTracker.Clear();
+        await using (var transaction = await db.Database.BeginTransactionAsync(ct))
+        {
+            var booking = await LockAsync(bookingId, ct);
+            try
+            {
+                if (change(booking) is { } recorded)
+                {
+                    db.BookingEvents.Add(recorded);
+                }
+            }
+            catch (DomainException ex) when (ex.Code == ErrorCodes.WrongCode)
+            {
+                await db.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
+                throw;
+            }
+
+            await db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+        }
+
+        await SettleAllAsync([bookingId], ct);
     }
 
     private Task ChangeAsync(Guid bookingId, CancellationToken ct, Func<Booking, BookingEvent?> change) =>

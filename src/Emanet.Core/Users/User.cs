@@ -20,6 +20,13 @@ public sealed class User
 
     public DateTimeOffset CreatedAt { get; private set; }
 
+    /// <summary>Stars owners gave this person as a renter.</summary>
+    public int RatingSum { get; private set; }
+
+    public int RatingCount { get; private set; }
+
+    public double? Rating => RatingCount == 0 ? null : Math.Round((double)RatingSum / RatingCount, 1);
+
     public static User Register(string email, string displayName, DateTimeOffset now)
     {
         var name = displayName.Trim();

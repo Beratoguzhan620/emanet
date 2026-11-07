@@ -1,4 +1,5 @@
 using Emanet.Core.Listings;
+using Emanet.Core.Reviews;
 
 namespace Emanet.Core.Bookings;
 
@@ -43,9 +44,20 @@ public enum BookingEventKind
     PickedUp,
     Returned,
     DamageReported,
+    ClaimAccepted,
+    ClaimRejected,
     ClaimSettled,
+    DepositCharged,
     DepositReleased,
     Completed,
+    Reviewed,
+}
+
+/// <summary>Where the renter stands on a damage claim.</summary>
+public enum ClaimAnswer
+{
+    Accepted,
+    Rejected,
 }
 
 /// <summary>
@@ -66,6 +78,17 @@ public sealed class Booking
 
     /// <summary>Cancelling this long before the pickup day refunds the whole rent; later, half.</summary>
     public static readonly TimeSpan FreeCancellation = TimeSpan.FromHours(48);
+
+    /// <summary>After the item comes back, the owner has this long to report damage; then the deposit is let go.</summary>
+    public static readonly TimeSpan ClaimWithin = TimeSpan.FromHours(48);
+
+    /// <summary>The renter has this long to answer a damage claim; silence accepts it.</summary>
+    public static readonly TimeSpan AnswerClaimWithin = TimeSpan.FromHours(72);
+
+    /// <summary>Wrong handover codes allowed before the code is replaced with a new one.</summary>
+    public const int CodeTries = 5;
+
+    public const int ClaimNoteMax = 1000;
 
     private Booking()
     {
@@ -125,12 +148,50 @@ public sealed class Booking
     /// <summary>When a refund owed after a cancellation went back to the card.</summary>
     public DateTimeOffset? RefundedAt { get; private set; }
 
+    /// <summary>Shown on the renter's screen at pickup; the owner types it in to say the item was handed over.</summary>
+    public string? PickupCode { get; private set; }
+
+    /// <summary>Shown on the owner's screen at return; the renter types it in to say the item was given back.</summary>
+    public string? ReturnCode { get; private set; }
+
+    public int WrongCodes { get; private set; }
+
+    public DateTimeOffset? PickedUpAt { get; private set; }
+
+    public DateTimeOffset? ReturnedAt { get; private set; }
+
+    /// <summary>What the owner says the damage cost, taken from the deposit if the renter agrees or an admin decides.</summary>
+    public long ClaimMinor { get; private set; }
+
+    public string ClaimNote { get; private set; } = string.Empty;
+
+    public DateTimeOffset? ClaimedAt { get; private set; }
+
+    public ClaimAnswer? RenterAnswer { get; private set; }
+
+    public string RenterAnswerNote { get; private set; } = string.Empty;
+
+    /// <summary>What was finally taken from the deposit for damage.</summary>
+    public long DamageMinor { get; private set; }
+
+    /// <summary>When the deposit was charged for damage or let go; null while that is still to be done.</summary>
+    public DateTimeOffset? DepositSettledAt { get; private set; }
+
     public bool InvolvesUser(Guid userId) => OwnerId == userId || RenterId == userId;
+
+    /// <summary>The last moment the owner can report damage.</summary>
+    public DateTimeOffset? ClaimBy => ReturnedAt + ClaimWithin;
+
+    /// <summary>The last moment the renter can answer a claim.</summary>
+    public DateTimeOffset? AnswerBy => ClaimedAt + AnswerClaimWithin;
 
     public bool Holds => Status is BookingStatus.Confirmed or BookingStatus.Active or BookingStatus.Returned or BookingStatus.Disputed or BookingStatus.Completed;
 
     /// <summary>The renter sees the exact pickup point once the rental is theirs.</summary>
     public bool RevealsPlace => Status is BookingStatus.Confirmed or BookingStatus.Active;
+
+    /// <summary>Both sides may review once the rental is over, for two weeks.</summary>
+    public bool CanBeReviewed(DateTimeOffset now) => Status == BookingStatus.Completed && PickedUpAt is not null && now < ClosedAt + Review.Window;
 
     public long OwnerShareMinor => RentMinor - FeeMinor;
 
@@ -206,6 +267,197 @@ public sealed class Booking
 
         Status = BookingStatus.Confirmed;
         ConfirmedAt = now;
+        PickupCode = NewCode();
+        ReturnCode = NewCode(PickupCode);
+    }
+
+    /// <summary>The owner hands the item over and types in the code from the renter's screen.</summary>
+    public void PickUp(Guid by, string? code, DateTimeOffset now)
+    {
+        RequireOwner(by, "Only the owner confirms the handover; show them your code.");
+        Expect(BookingStatus.Confirmed, "Only a confirmed rental can be picked up.");
+        var today = Clock.Today(now);
+        if (today < Start || today >= End)
+        {
+            throw new DomainException(ErrorCodes.InvalidState, $"The pickup is from {Start:yyyy-MM-dd} until the day before {End:yyyy-MM-dd}.");
+        }
+
+        CheckCode(PickupCode!, code, () => PickupCode = NewCode(PickupCode));
+        Status = BookingStatus.Active;
+        PickedUpAt = now;
+    }
+
+    /// <summary>The renter gives the item back and types in the code from the owner's screen.</summary>
+    public void GiveBack(Guid by, string? code, DateTimeOffset now)
+    {
+        if (by != RenterId)
+        {
+            throw new DomainException(ErrorCodes.Forbidden, "Only the renter confirms the return; show them your code.");
+        }
+
+        Expect(BookingStatus.Active, "Only an item that was picked up can be given back.");
+        CheckCode(ReturnCode!, code, () => ReturnCode = NewCode(ReturnCode));
+        Status = BookingStatus.Returned;
+        ReturnedAt = now;
+    }
+
+    /// <summary>The owner asks for part or all of the deposit for damage, within two days of the return.</summary>
+    public void ReportDamage(Guid by, long amount, string? note, DateTimeOffset now)
+    {
+        RequireOwner(by, "Only the owner can report damage.");
+        Expect(BookingStatus.Returned, "Damage is reported after the item comes back, before the deposit is let go.");
+        if (now >= ClaimBy)
+        {
+            throw new DomainException(ErrorCodes.InvalidState, "The time to report damage has passed.");
+        }
+
+        if (amount <= 0 || amount > DepositMinor)
+        {
+            throw new DomainException(ErrorCodes.ValidationFailed, $"A claim is more than nothing and at most the deposit ({DepositMinor / 100m:0.00} TL).");
+        }
+
+        var cleaned = Text.CleanParagraphs(note, ClaimNoteMax, "A description of the damage");
+        if (cleaned.Length < 10)
+        {
+            throw new DomainException(ErrorCodes.ValidationFailed, "Say what was damaged, in a sentence or two.");
+        }
+
+        Status = BookingStatus.Disputed;
+        ClaimMinor = amount;
+        ClaimNote = cleaned;
+        ClaimedAt = now;
+    }
+
+    /// <summary>The owner says all is well before the claim window ends; the deposit is let go.</summary>
+    public void AllGood(Guid by, DateTimeOffset now)
+    {
+        RequireOwner(by, "Only the owner can say the item came back fine.");
+        Expect(BookingStatus.Returned, "Only a returned item can be signed off.");
+        Complete(0, "The item came back fine.", now);
+    }
+
+    public void AcceptClaim(Guid by, DateTimeOffset now)
+    {
+        RequireRenter(by, "Only the renter answers a claim.");
+        ExpectOpenClaim();
+        RenterAnswer = ClaimAnswer.Accepted;
+        Complete(ClaimMinor, "The renter accepted the claim.", now);
+    }
+
+    /// <summary>The renter disagrees; an administrator decides.</summary>
+    public void RejectClaim(Guid by, string? note, DateTimeOffset now)
+    {
+        RequireRenter(by, "Only the renter answers a claim.");
+        ExpectOpenClaim();
+        if (now >= AnswerBy)
+        {
+            throw new DomainException(ErrorCodes.InvalidState, "The time to answer has passed; the claim was accepted.");
+        }
+
+        RenterAnswer = ClaimAnswer.Rejected;
+        RenterAnswerNote = Text.CleanParagraphs(note, ClaimNoteMax, "Your side");
+    }
+
+    /// <summary>An administrator settles a disputed claim at any amount from nothing to what was claimed.</summary>
+    public void Resolve(long amount, string? note, DateTimeOffset now)
+    {
+        Expect(BookingStatus.Disputed, "Only a disputed rental can be resolved.");
+        if (amount < 0 || amount > ClaimMinor)
+        {
+            throw new DomainException(ErrorCodes.ValidationFailed, $"The decision is between nothing and the claim ({ClaimMinor / 100m:0.00} TL).");
+        }
+
+        Complete(amount, Text.CleanParagraphs(note, ReasonMax, "A note") is { Length: > 0 } cleaned ? cleaned : "Decided by an administrator.", now);
+    }
+
+    /// <summary>
+    /// What the clock settles on its own: a quiet claim window lets the deposit go, a claim left unanswered is
+    /// accepted, and a rental never picked up ends once its days are over. Returns whether anything changed.
+    /// </summary>
+    public bool Lapse(DateTimeOffset now)
+    {
+        switch (Status)
+        {
+            case BookingStatus.Returned when now >= ClaimBy:
+                Complete(0, "No damage was reported.", now);
+                return true;
+            case BookingStatus.Disputed when RenterAnswer is null && now >= AnswerBy:
+                RenterAnswer = ClaimAnswer.Accepted;
+                Complete(ClaimMinor, "The renter did not answer the claim in time.", now);
+                return true;
+            case BookingStatus.Confirmed when Clock.Today(now) >= End:
+                Complete(0, "The item was never picked up.", now);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>The deposit still owes its settlement: a charge for damage, or being let go.</summary>
+    public bool OwesDepositSettlement => Status == BookingStatus.Completed && DepositSettledAt is null;
+
+    public void DepositSettled(DateTimeOffset now) => DepositSettledAt ??= now;
+
+    private void Complete(long damage, string reason, DateTimeOffset now)
+    {
+        DamageMinor = damage;
+        Close(BookingStatus.Completed, reason, now);
+    }
+
+    private void ExpectOpenClaim()
+    {
+        Expect(BookingStatus.Disputed, "There is no open claim.");
+        if (RenterAnswer is not null)
+        {
+            throw new DomainException(ErrorCodes.InvalidState, "You already answered this claim.");
+        }
+    }
+
+    private void CheckCode(string expected, string? given, Action renew)
+    {
+        if (string.Equals(expected, given?.Trim(), StringComparison.Ordinal))
+        {
+            WrongCodes = 0;
+            return;
+        }
+
+        if (++WrongCodes >= CodeTries)
+        {
+            WrongCodes = 0;
+            renew();
+            throw new DomainException(ErrorCodes.WrongCode, "Too many wrong codes. A new code is on the other person's screen.");
+        }
+
+        throw new DomainException(ErrorCodes.WrongCode, $"That code is not right. {CodeTries - WrongCodes} tries left.");
+    }
+
+    private void RequireOwner(Guid by, string message)
+    {
+        if (by != OwnerId)
+        {
+            throw new DomainException(ErrorCodes.Forbidden, message);
+        }
+    }
+
+    private void RequireRenter(Guid by, string message)
+    {
+        if (by != RenterId)
+        {
+            throw new DomainException(ErrorCodes.Forbidden, message);
+        }
+    }
+
+    /// <summary>Six random digits, never the same as the code being replaced.</summary>
+    private static string NewCode(string? replacing = null)
+    {
+        string code;
+        do
+        {
+            code = System.Security.Cryptography.RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6", System.Globalization.CultureInfo.InvariantCulture);
+        }
+        while (code == replacing);
+
+        return code;
     }
 
     public void Decline(string? reason, DateTimeOffset now)

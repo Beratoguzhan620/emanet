@@ -14,4 +14,6 @@ public static class ErrorCodes
     public const string NotYourListing = "not_your_listing";
     public const string Unavailable = "unavailable";
     public const string PaymentDeclined = "payment_declined";
+    public const string WrongCode = "wrong_code";
+    public const string AlreadyReviewed = "already_reviewed";
 }

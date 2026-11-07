@@ -1,6 +1,7 @@
 using Emanet.Core.Bookings;
 using Emanet.Core.Ledger;
 using Emanet.Core.Listings;
+using Emanet.Core.Reviews;
 using Emanet.Core.Users;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,6 +21,10 @@ public sealed class EmanetDbContext(DbContextOptions<EmanetDbContext> options) :
     public DbSet<Booking> Bookings => Set<Booking>();
 
     public DbSet<BookingEvent> BookingEvents => Set<BookingEvent>();
+
+    public DbSet<HandoverPhoto> HandoverPhotos => Set<HandoverPhoto>();
+
+    public DbSet<Review> Reviews => Set<Review>();
 
     public DbSet<JournalEntry> Journal => Set<JournalEntry>();
 

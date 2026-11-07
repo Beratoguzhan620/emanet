@@ -18,6 +18,8 @@ internal static class ErrorStatuses
         [ErrorCodes.NotYourListing] = StatusCodes.Status403Forbidden,
         [ErrorCodes.Unavailable] = StatusCodes.Status409Conflict,
         [ErrorCodes.PaymentDeclined] = StatusCodes.Status402PaymentRequired,
+        [ErrorCodes.WrongCode] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.AlreadyReviewed] = StatusCodes.Status409Conflict,
     };
 
     public static int StatusFor(string code) =>
