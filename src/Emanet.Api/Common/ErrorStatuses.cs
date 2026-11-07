@@ -17,6 +17,7 @@ internal static class ErrorStatuses
         [ErrorCodes.RateLimited] = StatusCodes.Status429TooManyRequests,
         [ErrorCodes.NotYourListing] = StatusCodes.Status403Forbidden,
         [ErrorCodes.Unavailable] = StatusCodes.Status409Conflict,
+        [ErrorCodes.PaymentDeclined] = StatusCodes.Status402PaymentRequired,
     };
 
     public static int StatusFor(string code) =>

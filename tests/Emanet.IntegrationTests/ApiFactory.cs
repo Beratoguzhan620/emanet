@@ -4,6 +4,9 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
+using Emanet.Api.Features.Bookings;
+using Emanet.Core.Payments;
+using Emanet.Infrastructure.Payments;
 using Emanet.Infrastructure.Storage;
 using Emanet.IntegrationTests.Support;
 using Npgsql;
@@ -26,6 +29,11 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     /// <summary>Photos are kept in memory here; <see cref="StorageTests"/> runs the real store against MinIO.</summary>
     public MemoryFileStore Files { get; } = new();
 
+    public const string AdminEmail = "books@example.com";
+
+    /// <summary>The payment provider every request uses; tests can make it fail.</summary>
+    public FlakyPayments Payments => Services.GetRequiredService<FlakyPayments>();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
@@ -36,14 +44,25 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("Storage:ServiceUrl", "http://storage.invalid");
         builder.UseSetting("Storage:AccessKey", "not-used");
         builder.UseSetting("Storage:SecretKey", "not-used");
+        // Tests run the sweeper themselves, one pass at a time.
+        builder.UseSetting("Sweeper:Enabled", "false");
+        builder.UseSetting("Admin:Emails:0", AdminEmail);
         builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(Clock);
             services.RemoveAll<IFileStore>();
             services.AddSingleton<IFileStore>(Files);
+            services.AddSingleton<FlakyPayments>();
+            services.RemoveAll<IPaymentProvider>();
+            services.AddSingleton<IPaymentProvider>(provider => provider.GetRequiredService<FlakyPayments>());
         });
     }
+
+    public Task<SweepPass> SweepAsync() => Services.GetRequiredService<BookingSweeper>().RunOnceAsync();
+
+    /// <summary>Today in Turkey on the test clock, plus some days.</summary>
+    public DateOnly Day(int fromToday) => Core.Clock.Today(Clock.GetUtcNow()).AddDays(fromToday);
 
     public async Task<T?> ScalarAsync<T>(string sql, params object[] parameters)
     {

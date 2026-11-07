@@ -13,7 +13,8 @@ using NpgsqlTypes;
 namespace Emanet.Api.Features.Listings;
 
 public sealed record SearchFilters(
-    string? Q, Category? Category, double? Lat, double? Lng, double? RadiusKm, decimal? MinPrice, decimal? MaxPrice, ListingSort? Sort, int? Page, int? PageSize);
+    string? Q, Category? Category, double? Lat, double? Lng, double? RadiusKm, decimal? MinPrice, decimal? MaxPrice, DateOnly? From, DateOnly? To,
+    ListingSort? Sort, int? Page, int? PageSize);
 
 internal static partial class ListingQueries
 {
@@ -79,6 +80,21 @@ internal static partial class ListingQueries
             query = query.Where(l => l.PricePerDayMinor <= minor);
         }
 
+        if (f.From is { } from && f.To is { } to)
+        {
+            if (to <= from)
+            {
+                throw new DomainException(ErrorCodes.ValidationFailed, "The return day comes after the pickup day.");
+            }
+
+            var days = to.DayNumber - from.DayNumber;
+            query = query.Where(l => l.MinDays <= days && days <= l.MaxDaysPerRental && !db.Calendar.Any(c => c.ListingId == l.Id && c.Start < to && from < c.End));
+        }
+        else if (f.From is not null || f.To is not null)
+        {
+            throw new DomainException(ErrorCodes.ValidationFailed, "Send both from and to, or neither.");
+        }
+
         var sort = f.Sort ?? (words is not null ? ListingSort.Relevance : origin is not null ? ListingSort.Distance : ListingSort.Newest);
         if (sort == ListingSort.Distance && origin is null)
         {
@@ -133,6 +149,8 @@ internal static partial class ListingQueries
     {
         var listing = await db.Listings.AsNoTracking().SingleOrDefaultAsync(l => l.Id == listingId, ct);
         var mine = listing is not null && viewerId == listing.OwnerId;
+        var renting = listing is not null && viewerId is { } viewer && !mine && await db.Bookings.AnyAsync(
+            b => b.ListingId == listing.Id && b.RenterId == viewer && (b.Status == Core.Bookings.BookingStatus.Confirmed || b.Status == Core.Bookings.BookingStatus.Active), ct);
         // A removed listing is gone for everyone; a paused one stays visible to its owner and to links people already have.
         if (listing is null || listing.Status == ListingStatus.Removed)
         {
@@ -145,11 +163,11 @@ internal static partial class ListingQueries
         var photos = await db.ListingPhotos.AsNoTracking().Where(p => p.ListingId == listingId).OrderBy(p => p.Position)
             .Select(p => new { p.Id, p.Width, p.Height })
             .ToListAsync(ct);
-        var place = PlaceFor(listing, exact: mine);
+        var place = PlaceFor(listing, exact: mine || renting);
         return new ListingResponse(
             listing.Id, listing.Title, listing.Description, listing.Category,
             Money.FromMinor(listing.PricePerDayMinor), listing.WeeklyPercentOff, Money.FromMinor(listing.DepositMinor),
-            listing.MinDays, listing.MaxDaysPerRental, place,
+            listing.MinDays, listing.MaxDaysPerRental, listing.InstantBook, place,
             photos.Select(p => new PhotoResponse(p.Id, PhotoUrl(p.Id), ThumbUrl(p.Id), p.Width, p.Height)).ToList(),
             owner, listing.Rating, listing.RatingCount, listing.Status, mine, listing.CreatedAt, listing.UpdatedAt);
     }

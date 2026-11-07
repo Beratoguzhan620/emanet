@@ -15,11 +15,12 @@ internal static class ListingEndpoints
     {
         var group = app.MapGroup("/api/listings").WithTags("Listings");
         group.MapGet("/", Search).AllowAnonymous().WithSummary("Search what is for rent")
-            .WithDescription("No sign-in needed. Words are matched as Turkish (so 'çadırlar' finds 'çadır'), and also as part of a title. " +
-                "With lat and lng, results are limited to radiusKm (25 by default) and distances are measured from each item's approximate place.");
+            .WithDescription("No sign-in needed. Words are matched as Turkish (so 'sandalyeler' finds 'sandalye') and as the start of a word. " +
+                "With lat and lng, results are limited to radiusKm (25 by default) and distances are measured from each item's approximate place. " +
+                "With from and to, only listings free for all of those days are shown.");
         group.MapGet("/categories", Categories).AllowAnonymous().WithSummary("The categories, with how many active listings each has");
         group.MapGet("/{listingId:guid}", Get).AllowAnonymous().WithSummary("One listing")
-            .WithDescription("Its owner sees the exact pickup point; everyone else sees the centre of a cell a few hundred metres wide.");
+            .WithDescription("Its owner, and a renter with a confirmed rental of it, see the exact pickup point; everyone else sees the centre of a cell a few hundred metres wide.");
         group.MapPost("/", Create).RequireAuthorization().WithSummary("Rent something out");
         group.MapPut("/{listingId:guid}", Update).RequireAuthorization().WithSummary("Change your listing");
         group.MapPost("/{listingId:guid}/pause", Pause).RequireAuthorization().WithSummary("Hide your listing from search for a while");
@@ -51,7 +52,7 @@ internal static class ListingEndpoints
         var userId = user.UserId();
         var listing = Listing.Create(
             userId, request.Title, request.Description, request.Category, Money.ToMinor(request.PricePerDay, "The price per day"), request.WeeklyPercentOff,
-            Money.ToMinor(request.Deposit, "The deposit"), request.Latitude, request.Longitude, request.Area, request.MinDays, request.MaxDays, clock.GetUtcNow());
+            Money.ToMinor(request.Deposit, "The deposit"), request.Latitude, request.Longitude, request.Area, request.MinDays, request.MaxDays, clock.GetUtcNow(), request.InstantBook);
         db.Listings.Add(listing);
         await db.SaveChangesAsync(ct);
         return TypedResults.Created($"/api/listings/{listing.Id}", await ListingQueries.DetailAsync(db, listing.Id, userId, ct));
@@ -62,7 +63,7 @@ internal static class ListingEndpoints
         var listing = await OwnAsync(db, listingId, user, ct);
         listing.Change(
             request.Title, request.Description, request.Category, Money.ToMinor(request.PricePerDay, "The price per day"), request.WeeklyPercentOff,
-            Money.ToMinor(request.Deposit, "The deposit"), request.Latitude, request.Longitude, request.Area, request.MinDays, request.MaxDays, clock.GetUtcNow());
+            Money.ToMinor(request.Deposit, "The deposit"), request.Latitude, request.Longitude, request.Area, request.MinDays, request.MaxDays, clock.GetUtcNow(), request.InstantBook);
         await db.SaveChangesAsync(ct);
         return TypedResults.Ok(await ListingQueries.DetailAsync(db, listingId, listing.OwnerId, ct));
     }
