@@ -33,6 +33,7 @@ export const daysBetween = (start: string, end: string) => Math.round((Date.pars
 export function formatRange(start: string, end: string): string {
   const a = new Date(`${start}T00:00:00Z`);
   const b = new Date(`${end}T00:00:00Z`);
+  if (start === end) return shortDay.format(a);
   if (a.getUTCMonth() === b.getUTCMonth()) return `${a.getUTCDate()}–${shortDay.format(b)}`;
   return `${shortDay.format(a)} – ${shortDay.format(b)}`;
 }

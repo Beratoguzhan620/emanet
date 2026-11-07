@@ -49,7 +49,7 @@ export function Calendar({ ranges, start, end, onPick, owner = false }: {
     <div className="calendar">
       <div className="row between">
         <button type="button" className="icon-button" onClick={() => setOffset(offset - 1)} disabled={offset === 0} aria-label="Earlier months"><ChevronLeft size={18} /></button>
-        <span className="small muted">{start && !end ? "Now pick the return day" : onPick ? "Pick the pickup day" : ""}</span>
+        <span className="small muted">{!onPick ? "" : owner ? (start && !end ? "Now pick the day it is free again" : "Pick the first day to close") : start && !end ? "Now pick the return day" : "Pick the pickup day"}</span>
         <button type="button" className="icon-button" onClick={() => setOffset(offset + 1)} disabled={offset >= 10} aria-label="Later months"><ChevronRight size={18} /></button>
       </div>
       <div className="months">
