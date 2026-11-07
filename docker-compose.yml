@@ -1,0 +1,76 @@
+# One command: docker compose up --build
+# App: http://localhost:8080 · API reference: http://localhost:8080/scalar
+# PostgreSQL with PostGIS keeps listings, calendars and the books; MinIO keeps photos; nginx serves the app and the API.
+name: emanet
+
+services:
+  db:
+    image: postgis/postgis:17-3.5-alpine
+    environment:
+      POSTGRES_DB: emanet
+      POSTGRES_USER: emanet
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-emanet-local}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U emanet -d emanet"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # S3-compatible object storage. Only the API talks to it; photos reach browsers through the API.
+  storage:
+    image: cgr.dev/chainguard/minio@sha256:3c60a2a8c4d33409a9bc7a623a7fcbfb4605adc3d89422d2f53b3f673a6e5597
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:-emanet}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:-emanet-local-storage-key}
+    volumes:
+      - storage-data:/data
+
+  api:
+    build: .
+    restart: on-failure
+    depends_on:
+      db:
+        condition: service_healthy
+      storage:
+        condition: service_started
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Emanet: "Host=db;Database=emanet;Username=emanet;Password=${POSTGRES_PASSWORD:-emanet-local}"
+      Database__MigrateOnStartup: "true"
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:-local-signing-key-change-me-in-the-env-file-0123456789}
+      Storage__ServiceUrl: "http://storage:9000"
+      Storage__AccessKey: ${STORAGE_ACCESS_KEY:-emanet}
+      Storage__SecretKey: ${STORAGE_SECRET_KEY:-emanet-local-storage-key}
+      Storage__CreateBucket: "true"
+      Admin__Emails__0: ${ADMIN_EMAIL:-support@emanet.local}
+      Auth__AttemptsPerMinute: ${AUTH_ATTEMPTS_PER_MINUTE:-10}
+      # nginx is in front: per-address limits must see the browser's address, not nginx's.
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q Healthy <&3"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    restart: on-failure
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  db-data:
+  storage-data:

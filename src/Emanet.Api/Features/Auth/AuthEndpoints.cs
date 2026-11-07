@@ -19,8 +19,8 @@ public sealed record UserResponse(Guid Id, string Email, string DisplayName);
 
 public sealed record SessionResponse(string AccessToken, DateTimeOffset ExpiresAt, UserResponse User);
 
-/// <summary>You, with how many things you rent out right now.</summary>
-public sealed record MeResponse(UserResponse User, DateTimeOffset MemberSince, int ActiveListings);
+/// <summary>You, with how many things you rent out right now, and whether you settle claims as an administrator.</summary>
+public sealed record MeResponse(UserResponse User, DateTimeOffset MemberSince, int ActiveListings, bool IsAdmin);
 
 internal static partial class AuthEndpoints
 {
@@ -32,7 +32,7 @@ internal static partial class AuthEndpoints
     {
         var group = app.MapGroup("/api/auth").WithTags("Auth");
         group.MapPost("/register", Register).RequireRateLimiting(RateLimit).WithSummary("Create an account")
-            .WithDescription("Create a company afterwards, or ask a company owner to add you to their team.");
+            .WithDescription("One account both rents things out and rents from others.");
         group.MapPost("/login", Login).RequireRateLimiting(RateLimit).WithSummary("Sign in");
         app.MapGet("/api/me", Me).WithTags("Auth").RequireAuthorization().WithSummary("You");
         return app;
@@ -103,13 +103,14 @@ internal static partial class AuthEndpoints
         return TypedResults.Ok(Session(tokens, user));
     }
 
-    private static async Task<Ok<MeResponse>> Me(ClaimsPrincipal principal, EmanetDbContext db, CancellationToken ct)
+    private static async Task<Ok<MeResponse>> Me(ClaimsPrincipal principal, EmanetDbContext db, IConfiguration configuration, CancellationToken ct)
     {
         var userId = principal.UserId();
         var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == userId, ct)
             ?? throw new DomainException(ErrorCodes.NotFound, "The account no longer exists.");
         var listings = await db.Listings.CountAsync(l => l.OwnerId == userId && l.Status == ListingStatus.Active, ct);
-        return TypedResults.Ok(new MeResponse(new UserResponse(user.Id, user.Email, user.DisplayName), user.CreatedAt, listings));
+        var admin = await principal.IsAdminAsync(db, configuration, ct);
+        return TypedResults.Ok(new MeResponse(new UserResponse(user.Id, user.Email, user.DisplayName), user.CreatedAt, listings, admin));
     }
 
     private static SessionResponse Session(TokenService tokens, User user)

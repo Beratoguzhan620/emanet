@@ -254,8 +254,10 @@ public sealed class BookingTests(ApiFactory factory)
         using var someone = await factory.RegisterAsync();
 
         var books = await (await admin.Http.GetAsync("/api/admin/books")).ReadAsync<BooksDto>();
+        var me = await (await admin.Http.GetAsync("/api/me")).ReadAsync<MeDto>();
         var refused = await someone.Http.GetAsync("/api/admin/books");
 
+        Assert.True(me.IsAdmin);
         Assert.True(books.Balanced);
         Assert.True(books.Reconciled, $"ledger {books.ProviderClearing} vs provider {books.ProviderSays}");
         Assert.Equal(0m, books.LedgerTotal);

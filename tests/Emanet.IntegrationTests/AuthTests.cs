@@ -8,7 +8,7 @@ namespace Emanet.IntegrationTests;
 public sealed class AuthTests(ApiFactory factory)
 {
     [Fact]
-    public async Task Registering_signs_in_with_no_companies_yet()
+    public async Task Registering_signs_in_with_nothing_listed_yet()
     {
         using var anonymous = factory.CreateClient();
         var email = $"Zeynep.{Guid.NewGuid():N}@Example.com";
@@ -21,7 +21,7 @@ public sealed class AuthTests(ApiFactory factory)
 
         anonymous.DefaultRequestHeaders.Authorization = new("Bearer", session.AccessToken);
         var me = await (await anonymous.GetAsync("/api/me")).ReadAsync<MeDto>();
-        Assert.Equal(0, me.ActiveListings);
+        Assert.Equal((0, false), (me.ActiveListings, me.IsAdmin));
     }
 
     [Fact]
