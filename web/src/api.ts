@@ -80,6 +80,8 @@ export interface SearchFilters {
 export const api = {
   register: (body: { email: string; displayName: string; password: string }) => request<Session>("/api/auth/register", post(body)),
   login: (email: string, password: string) => request<Session>("/api/auth/login", post({ email, password })),
+  /** The public demo's sign-ins; empty anywhere else. */
+  demo: () => request<{ role: string; email: string; password: string }[]>("/api/demo"),
   me: () => request<Me>("/api/me"),
 
   search: (f: SearchFilters) => request<Page<ListingSummary>>(`/api/listings${query({ ...f })}`),
