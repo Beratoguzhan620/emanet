@@ -18,6 +18,8 @@ Two people can never get the same days, even when they ask at the same moment: t
 
 ## Try it
 
+**Live demo:** [emanet-demo.onrender.com](https://emanet-demo.onrender.com). Eight items from three owners around Samsun, with finished rentals and their reviews, and one request always waiting for the owner. Sign in as a renter (`ayse@emanet.demo`) to ask for an item, or as an owner (`mehmet@emanet.demo`) to answer the waiting request; the password for both is `emanet-demo-password`. It runs on a free server with the database on Neon: after a quiet spell the first visit can take about a minute.
+
 ```bash
 docker compose up --build
 ```
