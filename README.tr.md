@@ -18,6 +18,8 @@ Yakındaki insanlardan eşya kiralamak için bir pazar yeri: yılda iki kez kull
 
 ## Deneyin
 
+**Canlı demo:** [emanet-demo.onrender.com](https://emanet-demo.onrender.com). Samsun'da üç sahibin sekiz eşyası, biten kiralamalar ve yorumlarıyla; sahibini bekleyen bir talep her zaman var. Kiracı (`ayse@emanet.demo`) olarak bir eşya iste ya da sahip (`mehmet@emanet.demo`) olarak bekleyen talebi yanıtla; ikisinin de şifresi `emanet-demo-password`. Ücretsiz bir sunucuda, veritabanı Neon'da çalışıyor: bir süre kimse açmadıysa ilk açılış bir dakika kadar sürebilir.
+
 ```bash
 docker compose up --build
 ```
